@@ -1,0 +1,22 @@
+# Netlify App — Git orqali deploy (Drop/ZIP ishlamaydi: bu Next.js + Prisma).
+# Site settings → Environment variables ga secretlarni qo‘ying.
+
+[build]
+  command = "npx prisma generate && npm run build"
+  publish = ".next"
+
+[build.environment]
+  NODE_VERSION = "20"
+  NEXT_TELEMETRY_DISABLED = "1"
+  APP_ENV = "production"
+  NEXT_PUBLIC_APP_ENV = "production"
+
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
