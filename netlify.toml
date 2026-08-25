@@ -8,8 +8,9 @@
 [build.environment]
   NODE_VERSION = "20"
   NEXT_TELEMETRY_DISABLED = "1"
-  APP_ENV = "production"
-  NEXT_PUBLIC_APP_ENV = "production"
+  # Demo (baza yo‘q): development. Haqiqiy PostgreSQL bo‘lsa production qiling.
+  APP_ENV = "development"
+  NEXT_PUBLIC_APP_ENV = "development"
 
 [[plugins]]
   package = "@netlify/plugin-nextjs"
