@@ -1,9 +1,9 @@
 import { AdminSidebar } from "@/components/admin/admin-sidebar";
 import { SuperAdminShell } from "@/components/super-admin/super-admin-shell";
-import { getPageSessionUser } from "@/lib/page-auth";
+import { requireAdminPage } from "@/lib/page-auth";
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
-  const user = await getPageSessionUser();
+  const user = await requireAdminPage("/admin/dashboard");
 
   // Super admin /admin/... sahifalarga kirsa ham o'z (binafsha) qobig'ida qoladi
   if (user?.role === "super_admin") {

@@ -1,11 +1,11 @@
 import { ProfileSidebar } from "@/components/profile/profile-sidebar";
 import { getUserBonusBalance } from "@/lib/bonus";
 import { checkDatabaseConnection } from "@/lib/db";
-import { getPageSessionUser } from "@/lib/page-auth";
+import { requirePageSession } from "@/lib/page-auth";
 import prisma from "@/lib/prisma";
 
 export default async function ProfileLayout({ children }: { children: React.ReactNode }) {
-  const user = await getPageSessionUser();
+  const user = await requirePageSession("/profile");
   let name = user?.name ?? null;
   let phone = user?.phone ?? null;
   let bonusBalance = 0;
