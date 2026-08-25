@@ -97,9 +97,6 @@ export function getSiteSettingsSync(): SiteSettings {
     ...readJsonFile("site-settings.json", DEFAULT_SITE_SETTINGS),
   };
   const normalized = normalizeLegacyBrand(stored);
-  if (normalized.siteName !== stored.siteName) {
-    writeJsonFile("site-settings.json", normalized);
-  }
   return normalized;
 }
 

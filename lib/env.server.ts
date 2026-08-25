@@ -36,10 +36,22 @@ const serverEnvSchema = z.object({
       .optional(),
   ),
 
-  NEXTAUTH_SECRET: z
-    .string()
-    .min(32, "NEXTAUTH_SECRET kamida 32 belgidan iborat bo'lishi kerak"),
-  NEXTAUTH_URL: z.string().url("NEXTAUTH_URL to'g'ri URL bo'lishi kerak"),
+  NEXTAUTH_SECRET: z.preprocess((value) => {
+    if (typeof value === "string" && value.trim().length >= 32) return value.trim();
+    if ((process.env.APP_ENV ?? "development") === "development") {
+      return "development-netlify-secret-key-min-32-chars";
+    }
+    return value;
+  }, z.string().min(32, "NEXTAUTH_SECRET kamida 32 belgidan iborat bo'lishi kerak")),
+  NEXTAUTH_URL: z.preprocess((value) => {
+    if (typeof value === "string" && value.trim()) return value.trim();
+    return (
+      process.env.URL ||
+      process.env.DEPLOY_PRIME_URL ||
+      process.env.NEXT_PUBLIC_APP_URL ||
+      "http://localhost:3000"
+    );
+  }, z.string().url("NEXTAUTH_URL to'g'ri URL bo'lishi kerak")),
 
   LOCK_ADMIN_API: z.preprocess(
     (value) => value === "true" || value === true,
