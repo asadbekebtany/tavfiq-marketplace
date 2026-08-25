@@ -30,11 +30,13 @@ export default async function HomePage() {
   }));
 
   // WB joylashuv: hero → kategoriyalar → tavsiya → chegirma → brendlar → yangi → katalog
+  const empty = { products: [] as Awaited<ReturnType<typeof listCatalogProducts>>["products"] };
+
   const [recommended, discount, newest, catalog] = await Promise.all([
-    listCatalogProducts({ sort: "popular", limit: 12, featured: true }),
-    listCatalogProducts({ sort: "discount", limit: 12 }),
-    listCatalogProducts({ sort: "new", limit: 12 }),
-    listCatalogProducts({ sort: "popular", limit: 24 }),
+    listCatalogProducts({ sort: "popular", limit: 12, featured: true }).catch(() => empty),
+    listCatalogProducts({ sort: "discount", limit: 12 }).catch(() => empty),
+    listCatalogProducts({ sort: "new", limit: 12 }).catch(() => empty),
+    listCatalogProducts({ sort: "popular", limit: 24 }).catch(() => empty),
   ]);
 
   const recommendProducts =

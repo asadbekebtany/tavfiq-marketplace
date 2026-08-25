@@ -1,11 +1,12 @@
 import { PrismaClient } from "@prisma/client";
+import { getRuntimeDatabaseUrl } from "@/lib/runtime-env";
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
 };
 
 function createPrismaClient(): PrismaClient {
-  const url = process.env.DATABASE_URL?.trim();
+  const url = getRuntimeDatabaseUrl();
   if (!url) {
     return new Proxy({} as PrismaClient, {
       get(_target, prop) {
@@ -25,7 +26,7 @@ function createPrismaClient(): PrismaClient {
 
 export const prisma = globalForPrisma.prisma ?? createPrismaClient();
 
-if (process.env.NODE_ENV !== "production" && process.env.DATABASE_URL) {
+if (process.env.NODE_ENV !== "production" && getRuntimeDatabaseUrl()) {
   globalForPrisma.prisma = prisma;
 }
 
