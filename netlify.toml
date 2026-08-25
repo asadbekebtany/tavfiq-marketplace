@@ -2,7 +2,7 @@
 # Site settings → Environment variables ga secretlarni qo‘ying.
 
 [build]
-  command = "npx prisma generate && npm run build"
+  command = "npx prisma generate && npx next build --webpack"
   publish = ".next"
 
 [build.environment]
