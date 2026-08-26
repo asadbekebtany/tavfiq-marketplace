@@ -1,7 +1,5 @@
-import type { SiteSetting } from "@prisma/client";
-import { checkDatabaseConnection } from "@/lib/db";
-import prisma from "@/lib/prisma";
 import { readJsonFile, writeJsonFile } from "@/lib/json-store";
+import { getRuntimeDatabaseUrl } from "@/lib/runtime-env";
 import {
   DEFAULT_SITE_SETTINGS,
   type SiteSettings,
@@ -12,7 +10,22 @@ export { DEFAULT_SITE_SETTINGS };
 
 const SITE_SETTING_ID = "main";
 
-function mapFromDb(row: SiteSetting): SiteSettings {
+type SiteSettingRow = {
+  siteName: string;
+  siteShortName: string;
+  tagline: string | null;
+  email: string | null;
+  phone: string | null;
+  address: string | null;
+  freeDeliveryMin: number;
+  commissionPercent: number;
+  currency: string;
+  primaryColor: string;
+  accentColor: string;
+  updatedAt: Date;
+};
+
+function mapFromDb(row: SiteSettingRow): SiteSettings {
   return {
     siteName: row.siteName,
     siteShortName: row.siteShortName,
@@ -96,34 +109,38 @@ export function getSiteSettingsSync(): SiteSettings {
     ...DEFAULT_SITE_SETTINGS,
     ...readJsonFile("site-settings.json", DEFAULT_SITE_SETTINGS),
   };
-  const normalized = normalizeLegacyBrand(stored);
-  return normalized;
+  return normalizeLegacyBrand(stored);
 }
 
 export async function getSiteSettings(): Promise<SiteSettings> {
-  if (await checkDatabaseConnection()) {
-    try {
-      const row = await prisma.siteSetting.findUnique({
-        where: { id: SITE_SETTING_ID },
-      });
-      if (row) {
-        const mapped = normalizeLegacyBrand(mapFromDb(row));
-        if (mapped.siteName !== row.siteName) {
-          try {
-            await prisma.siteSetting.update({
-              where: { id: SITE_SETTING_ID },
-              data: toDbFields(mapped),
-            });
-            writeJsonFile("site-settings.json", mapped);
-          } catch {
-            // DB yangilab bo'lmadi — xarita qilingan qiymat baribir qaytariladi
-          }
+  if (!getRuntimeDatabaseUrl()) {
+    return getSiteSettingsSync();
+  }
+
+  try {
+    const { checkDatabaseConnection } = await import("@/lib/db");
+    if (!(await checkDatabaseConnection())) return getSiteSettingsSync();
+
+    const { default: prisma } = await import("@/lib/prisma");
+    const row = await prisma.siteSetting.findUnique({
+      where: { id: SITE_SETTING_ID },
+    });
+    if (row) {
+      const mapped = normalizeLegacyBrand(mapFromDb(row));
+      if (mapped.siteName !== row.siteName) {
+        try {
+          await prisma.siteSetting.update({
+            where: { id: SITE_SETTING_ID },
+            data: toDbFields(mapped),
+          });
+        } catch {
+          // ignore write failure
         }
-        return mapped;
       }
-    } catch {
-      // DB vaqtincha ishlamayapti
+      return mapped;
     }
+  } catch {
+    // DB vaqtincha ishlamayapti
   }
   return getSiteSettingsSync();
 }
@@ -134,16 +151,20 @@ export async function updateSiteSettings(
   const current = await getSiteSettings();
   const next = normalizeInput(current, input);
 
-  if (await checkDatabaseConnection()) {
+  if (getRuntimeDatabaseUrl()) {
     try {
-      const row = await prisma.siteSetting.upsert({
-        where: { id: SITE_SETTING_ID },
-        create: { id: SITE_SETTING_ID, ...toDbFields(next) },
-        update: toDbFields(next),
-      });
-      const saved = mapFromDb(row);
-      writeJsonFile("site-settings.json", saved);
-      return saved;
+      const { checkDatabaseConnection } = await import("@/lib/db");
+      if (await checkDatabaseConnection()) {
+        const { default: prisma } = await import("@/lib/prisma");
+        const row = await prisma.siteSetting.upsert({
+          where: { id: SITE_SETTING_ID },
+          create: { id: SITE_SETTING_ID, ...toDbFields(next) },
+          update: toDbFields(next),
+        });
+        const saved = mapFromDb(row);
+        writeJsonFile("site-settings.json", saved);
+        return saved;
+      }
     } catch {
       // JSON fallback
     }

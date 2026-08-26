@@ -42,7 +42,7 @@ export default async function HomePage() {
   const recommendProducts =
     recommended.products.length > 0
       ? recommended.products
-      : (await listCatalogProducts({ sort: "popular", limit: 12 })).products;
+      : (await listCatalogProducts({ sort: "popular", limit: 12 }).catch(() => empty)).products;
 
   return (
     <div className="min-h-screen overflow-x-clip bg-green-ornament">

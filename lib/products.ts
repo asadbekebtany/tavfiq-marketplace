@@ -1,9 +1,8 @@
 import "server-only";
 import type { Prisma } from "@prisma/client";
 import type { CatalogProduct } from "@/lib/catalog-product";
-import { resolveDataSource } from "@/lib/db";
+import { getRuntimeDatabaseUrl } from "@/lib/runtime-env";
 import { mockProducts } from "@/lib/mock-data";
-import prisma from "@/lib/prisma";
 
 export type ProductListParams = {
   q?: string;
@@ -43,7 +42,26 @@ const productInclude = {
   store: { select: { id: true, name: true, slug: true, isVerified: true } },
 } satisfies Prisma.ProductInclude;
 
-type DbProductRow = Prisma.ProductGetPayload<{ include: typeof productInclude }>;
+type DbProductRow = {
+  id: string;
+  name: string;
+  oemNumber: string | null;
+  slug: string;
+  price: number;
+  oldPrice: number | null;
+  discount: number;
+  rating: number;
+  reviewCount: number;
+  stock: number;
+  soldCount: number;
+  isActive: boolean;
+  isApproved: boolean;
+  isFeatured: boolean;
+  images: { url: string }[];
+  brand: { name: string } | null;
+  store: { name: string; slug: string; isVerified: boolean };
+  category: { id: string; name: string; slug: string };
+};
 
 function mapDbProduct(product: DbProductRow): CatalogProduct {
   return {
@@ -213,15 +231,38 @@ function buildWhere(params: ProductListParams): Prisma.ProductWhereInput {
   return where;
 }
 
-export async function listCatalogProducts(
-  params: ProductListParams = {},
-): Promise<ProductListResult> {
+function mockResult(params: ProductListParams): ProductListResult {
   const page = params.page ?? 1;
   const limit = params.limit ?? 20;
   const sort = params.sort ?? "popular";
-  const source = await resolveDataSource();
+  const filtered = filterMockProducts({ ...params, sort });
+  const total = filtered.length;
+  return {
+    products: filtered.slice((page - 1) * limit, page * limit),
+    total,
+    page,
+    limit,
+    totalPages: Math.max(1, Math.ceil(total / limit)),
+  };
+}
 
-  if (source === "database") {
+export async function listCatalogProducts(
+  params: ProductListParams = {},
+): Promise<ProductListResult> {
+  // Netlify demo: DATABASE_URL yo‘q — Prisma engine yuklanmasin
+  if (!getRuntimeDatabaseUrl()) {
+    return mockResult(params);
+  }
+
+  try {
+    const { resolveDataSource } = await import("@/lib/db");
+    const source = await resolveDataSource();
+    if (source !== "database") return mockResult(params);
+
+    const { default: prisma } = await import("@/lib/prisma");
+    const page = params.page ?? 1;
+    const limit = params.limit ?? 20;
+    const sort = params.sort ?? "popular";
     const where = buildWhere(params);
     const [total, rows] = await Promise.all([
       prisma.product.count({ where }),
@@ -235,42 +276,50 @@ export async function listCatalogProducts(
     ]);
 
     return {
-      products: rows.map(mapDbProduct),
+      products: rows.map((row) => mapDbProduct(row as unknown as DbProductRow)),
       total,
       page,
       limit,
       totalPages: Math.max(1, Math.ceil(total / limit)),
     };
+  } catch {
+    return mockResult(params);
   }
-
-  const filtered = filterMockProducts({ ...params, sort });
-  const total = filtered.length;
-  const products = filtered.slice((page - 1) * limit, page * limit);
-
-  return {
-    products,
-    total,
-    page,
-    limit,
-    totalPages: Math.max(1, Math.ceil(total / limit)),
-  };
 }
 
 export async function getCatalogProductBySlug(slug: string): Promise<CatalogProduct | null> {
-  const source = await resolveDataSource();
+  if (!getRuntimeDatabaseUrl()) {
+    return (
+      mockProducts.find(
+        (product) => product.slug === slug && product.isActive && product.isApproved,
+      ) ?? null
+    );
+  }
 
-  if (source === "database") {
+  try {
+    const { resolveDataSource } = await import("@/lib/db");
+    const source = await resolveDataSource();
+    if (source !== "database") {
+      return (
+        mockProducts.find(
+          (product) => product.slug === slug && product.isActive && product.isApproved,
+        ) ?? null
+      );
+    }
+
+    const { default: prisma } = await import("@/lib/prisma");
     const product = await prisma.product.findFirst({
       where: { slug, isActive: true, isApproved: true },
       include: productInclude,
     });
-    return product ? mapDbProduct(product) : null;
+    return product ? mapDbProduct(product as unknown as DbProductRow) : null;
+  } catch {
+    return (
+      mockProducts.find(
+        (product) => product.slug === slug && product.isActive && product.isApproved,
+      ) ?? null
+    );
   }
-
-  return (
-    mockProducts.find((product) => product.slug === slug && product.isActive && product.isApproved) ??
-    null
-  );
 }
 
 export async function getRelatedCatalogProducts(
