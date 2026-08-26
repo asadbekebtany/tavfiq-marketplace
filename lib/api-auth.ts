@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { serverEnv } from "@/lib/env.server";
 import { checkDatabaseConnection } from "@/lib/db";
-import prisma from "@/lib/prisma";
+import { getRuntimeDatabaseUrl } from "@/lib/runtime-env";
 import {
   hasPermission,
   type AdminRoleType,
@@ -114,10 +114,11 @@ export async function requirePermissionApi(permission: string) {
     };
   }
 
-  if (!(await checkDatabaseConnection())) {
+  if (!getRuntimeDatabaseUrl() || !(await checkDatabaseConnection())) {
     return { error: null, user, adminRole: null as AdminRoleType | null };
   }
 
+  const { default: prisma } = await import("@/lib/prisma");
   const admin = await prisma.admin.findUnique({
     where: { userId: user.id },
     select: { role: true },

@@ -1,8 +1,5 @@
 import { serverEnv } from "@/lib/env.server";
-import prisma from "@/lib/prisma";
 import { getRuntimeDatabaseUrl } from "@/lib/runtime-env";
-
-export { prisma as db } from "@/lib/prisma";
 
 export type DatabaseStatus = {
   configured: boolean;
@@ -14,9 +11,7 @@ let cachedConnected: boolean | null = null;
 let lastCheckedAt = 0;
 const CACHE_TTL_MS = 30_000;
 
-export async function checkDatabaseConnection(
-  force = false,
-): Promise<boolean> {
+export async function checkDatabaseConnection(force = false): Promise<boolean> {
   if (!getRuntimeDatabaseUrl()) {
     cachedConnected = false;
     return false;
@@ -28,6 +23,7 @@ export async function checkDatabaseConnection(
   }
 
   try {
+    const { default: prisma } = await import("@/lib/prisma");
     await prisma.$queryRaw`SELECT 1`;
     cachedConnected = true;
   } catch {

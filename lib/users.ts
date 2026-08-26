@@ -3,7 +3,7 @@ import type { User } from "@prisma/client";
 import { checkDatabaseConnection } from "@/lib/db";
 import { serverEnv } from "@/lib/env.server";
 import { normalizePhone } from "@/lib/phone";
-import prisma from "@/lib/prisma";
+import { getRuntimeDatabaseUrl } from "@/lib/runtime-env";
 
 export type AuthUserRecord = {
   id: string;
@@ -33,7 +33,7 @@ export class UserPersistenceError extends Error {
   }
 }
 
-/** DATABASE_URL yo‘q bo‘lganda dev/demo fallback (seed bilan mos ID lar) */
+/** DATABASE_URL yo‘q bo‘lganda demo panellar uchun fallback */
 const DEV_FALLBACK_USERS: Record<string, AuthUserRecord> = {
   "+998712000000": {
     id: "super-admin-id",
@@ -107,10 +107,9 @@ function isPrismaUniqueConstraintError(error: unknown): boolean {
   );
 }
 
-export async function findUserByPhone(
-  phoneRaw: string,
-): Promise<AuthUserRecord | null> {
+export async function findUserByPhone(phoneRaw: string): Promise<AuthUserRecord | null> {
   const phone = normalizePhone(phoneRaw);
+  const { default: prisma } = await import("@/lib/prisma");
   const user = await prisma.user.findUnique({ where: { phone } });
   if (!user) return null;
   assertUserCanSignIn(user);
@@ -121,6 +120,7 @@ export async function findOrCreateUserByPhone(
   phoneRaw: string,
 ): Promise<FindOrCreateUserResult> {
   const phone = normalizePhone(phoneRaw);
+  const { default: prisma } = await import("@/lib/prisma");
 
   const existing = await prisma.user.findUnique({ where: { phone } });
   if (existing) {
@@ -169,20 +169,16 @@ function resolveEphemeralGuestUser(phone: string): AuthUserRecord {
   };
 }
 
-/**
- * OTP tasdiqlangandan keyin foydalanuvchini PostgreSQL ga yozadi yoki mavjudini qaytaradi.
- */
 export async function persistUserAfterOtpVerification(
   phoneRaw: string,
 ): Promise<FindOrCreateUserResult> {
   const phone = normalizePhone(phoneRaw);
-  const connected = await checkDatabaseConnection();
 
-  if (connected) {
+  if (getRuntimeDatabaseUrl() && (await checkDatabaseConnection())) {
     return findOrCreateUserByPhone(phone);
   }
 
-  if (serverEnv.hasDatabase) {
+  if (serverEnv.hasDatabase && getRuntimeDatabaseUrl()) {
     throw new UserPersistenceError(
       "Ma'lumotlar bazasiga ulanish yo'q. Foydalanuvchi saqlanmadi.",
       "db_unavailable",
@@ -197,21 +193,14 @@ export async function persistUserAfterOtpVerification(
   return { ...resolveEphemeralGuestUser(phone), isNewUser: true };
 }
 
-/**
- * NextAuth authorize uchun foydalanuvchini aniqlash (DB birinchi o‘rinda).
- */
-export async function resolveAuthUser(
-  phoneRaw: string,
-): Promise<AuthUserRecord | null> {
+export async function resolveAuthUser(phoneRaw: string): Promise<AuthUserRecord | null> {
   const phone = normalizePhone(phoneRaw);
-  const connected = await checkDatabaseConnection();
 
-  if (connected) {
-    const user = await findOrCreateUserByPhone(phone);
-    return user;
+  if (getRuntimeDatabaseUrl() && (await checkDatabaseConnection())) {
+    return findOrCreateUserByPhone(phone);
   }
 
-  if (serverEnv.hasDatabase) {
+  if (serverEnv.hasDatabase && getRuntimeDatabaseUrl()) {
     throw new UserPersistenceError(
       "Ma'lumotlar bazasiga ulanish yo'q. Kirish vaqtincha mumkin emas.",
       "db_unavailable",

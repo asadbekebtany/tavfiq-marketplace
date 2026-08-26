@@ -1,7 +1,7 @@
 import "server-only";
 import { checkDatabaseConnection } from "@/lib/db";
 import { serverEnv } from "@/lib/env.server";
-import prisma from "@/lib/prisma";
+import { getRuntimeDatabaseUrl } from "@/lib/runtime-env";
 
 const RETENTION_MS = 24 * 60 * 60 * 1000;
 
@@ -96,9 +96,8 @@ function getRulesForScope(
   return rules;
 }
 
-async function peekRule(
-  rule: RateLimitRule,
-): Promise<RateLimitCheckResult> {
+async function peekRule(rule: RateLimitRule): Promise<RateLimitCheckResult> {
+  const { default: prisma } = await import("@/lib/prisma");
   const windowStart = new Date(Date.now() - rule.windowMs);
 
   const count = await prisma.authRateLimitEvent.count({
@@ -124,16 +123,11 @@ async function peekRule(
   const retryAfterSec = oldest
     ? Math.max(
         1,
-        Math.ceil(
-          (oldest.createdAt.getTime() + rule.windowMs - Date.now()) / 1000,
-        ),
+        Math.ceil((oldest.createdAt.getTime() + rule.windowMs - Date.now()) / 1000),
       )
     : Math.ceil(rule.windowMs / 1000);
 
-  const target =
-    rule.scope === "ip"
-      ? "IP manzildan"
-      : "ushbu telefon raqam uchun";
+  const target = rule.scope === "ip" ? "IP manzildan" : "ushbu telefon raqam uchun";
 
   return {
     allowed: false,
@@ -145,6 +139,7 @@ async function peekRule(
 
 async function recordRules(rules: RateLimitRule[]): Promise<void> {
   if (rules.length === 0) return;
+  const { default: prisma } = await import("@/lib/prisma");
 
   await prisma.authRateLimitEvent.createMany({
     data: rules.map((rule) => ({ bucketKey: rule.bucketKey })),
@@ -164,7 +159,7 @@ export async function enforceAuthRateLimit(params: {
   ip: string;
   phone?: string;
 }): Promise<RateLimitCheckResult> {
-  if (!(await checkDatabaseConnection())) {
+  if (!getRuntimeDatabaseUrl() || !(await checkDatabaseConnection())) {
     return { allowed: true };
   }
 

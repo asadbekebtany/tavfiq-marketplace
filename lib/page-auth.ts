@@ -1,6 +1,7 @@
 import "server-only";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { auth } from "@/lib/auth";
+import { getToken } from "next-auth/jwt";
 import { isAtLeast, type Role } from "@/lib/permissions";
 
 export type PageSessionUser = {
@@ -22,24 +23,38 @@ function parseRole(value: unknown): Role {
   return "customer";
 }
 
+/**
+ * Prisma/auth() yuklamasdan JWT o‘qiydi — Netlify panel sahifalari uchun.
+ */
 export async function getPageSessionUser(): Promise<PageSessionUser | null> {
-  const session = await auth();
-  if (!session?.user) return null;
+  try {
+    const cookieStore = await cookies();
+    const token = await getToken({
+      // next-auth/jwt App Router uchun cookie header kerak
+      req: {
+        headers: {
+          cookie: cookieStore
+            .getAll()
+            .map((c) => `${c.name}=${c.value}`)
+            .join("; "),
+        },
+      } as Parameters<typeof getToken>[0]["req"],
+      secret: process.env.NEXTAUTH_SECRET,
+    });
 
-  const user = session.user as {
-    id?: string;
-    role?: string;
-    name?: string | null;
-    phone?: string | null;
-  };
-  if (!user.id) return null;
+    if (!token) return null;
+    const id = typeof token.id === "string" ? token.id : typeof token.sub === "string" ? token.sub : null;
+    if (!id) return null;
 
-  return {
-    id: user.id,
-    role: parseRole(user.role),
-    name: user.name,
-    phone: user.phone,
-  };
+    return {
+      id,
+      role: parseRole(token.role),
+      name: typeof token.name === "string" ? token.name : null,
+      phone: typeof token.phone === "string" ? token.phone : null,
+    };
+  } catch {
+    return null;
+  }
 }
 
 export async function requirePageSession(fromPath: string): Promise<PageSessionUser> {

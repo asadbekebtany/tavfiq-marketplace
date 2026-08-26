@@ -3,8 +3,6 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { serverEnv } from "@/lib/env.server";
-import { writeAuditLog } from "@/lib/audit-log";
-import { verifyPhoneOtp } from "@/lib/otp";
 import { normalizePhone } from "@/lib/phone";
 import { enforceAuthRateLimit } from "@/lib/rate-limit";
 import { getClientIp } from "@/lib/request-ip";
@@ -12,6 +10,7 @@ import { resolveAuthUser, UserPersistenceError } from "@/lib/users";
 
 async function isOtpValid(phone: string, code: string): Promise<boolean> {
   if (serverEnv.sms.isConfigured) {
+    const { verifyPhoneOtp } = await import("@/lib/otp");
     const result = await verifyPhoneOtp(phone, code);
     return result.valid;
   }
@@ -58,6 +57,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token.id = user.id;
         token.role = (user as { role?: string }).role ?? "customer";
         token.phone = (user as { phone?: string }).phone ?? "";
+        token.name = user.name ?? "Foydalanuvchi";
       }
       return token;
     },
@@ -66,6 +66,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         (session.user as { id?: string }).id = token.id as string;
         (session.user as { role?: string }).role = token.role as string;
         (session.user as { phone?: string }).phone = token.phone as string;
+        if (typeof token.name === "string") session.user.name = token.name;
       }
       return session;
     },
@@ -78,17 +79,22 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       const userId = (user as { id?: string }).id;
       if (!userId) return;
 
-      await writeAuditLog({
-        actorId: userId,
-        actorRole: role,
-        action: "auth_login",
-        entityType: "session",
-        entityId: userId,
-        metadata: {
-          phone: (user as { phone?: string }).phone ?? null,
-          role,
-        },
-      });
+      try {
+        const { writeAuditLog } = await import("@/lib/audit-log");
+        await writeAuditLog({
+          actorId: userId,
+          actorRole: role,
+          action: "auth_login",
+          entityType: "session",
+          entityId: userId,
+          metadata: {
+            phone: (user as { phone?: string }).phone ?? null,
+            role,
+          },
+        });
+      } catch {
+        // demo / DB yo‘q
+      }
     },
   },
 });

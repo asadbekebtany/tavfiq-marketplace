@@ -1,6 +1,6 @@
 import "server-only";
+import { getRuntimeDatabaseUrl } from "@/lib/runtime-env";
 import { resolveDataSource } from "@/lib/db";
-import prisma from "@/lib/prisma";
 
 export type AdminDashboardStats = {
   users: number;
@@ -40,23 +40,27 @@ export function formatAdminStat(value: number, suffix = ""): string {
   return fmt(value) + suffix;
 }
 
+const EMPTY_STATS: AdminDashboardStats = {
+  users: 0,
+  orders: 0,
+  products: 0,
+  sellers: 0,
+  pendingProducts: 0,
+  pendingSellers: 0,
+  pendingReturns: 0,
+  openTickets: 0,
+  unansweredQuestions: 0,
+  monthlyRevenue: 0,
+  fromDatabase: false,
+};
+
 export async function getAdminDashboardStats(): Promise<AdminDashboardStats> {
+  if (!getRuntimeDatabaseUrl()) return EMPTY_STATS;
+
   const source = await resolveDataSource();
-  if (source !== "database") {
-    return {
-      users: 0,
-      orders: 0,
-      products: 0,
-      sellers: 0,
-      pendingProducts: 0,
-      pendingSellers: 0,
-      pendingReturns: 0,
-      openTickets: 0,
-      unansweredQuestions: 0,
-      monthlyRevenue: 0,
-      fromDatabase: false,
-    };
-  }
+  if (source !== "database") return EMPTY_STATS;
+
+  const { default: prisma } = await import("@/lib/prisma");
 
   const monthStart = new Date();
   monthStart.setDate(1);
@@ -108,9 +112,11 @@ export async function getAdminDashboardStats(): Promise<AdminDashboardStats> {
 }
 
 export async function getAdminPendingProducts(limit = 5): Promise<AdminPendingProduct[]> {
+  if (!getRuntimeDatabaseUrl()) return [];
   const source = await resolveDataSource();
   if (source !== "database") return [];
 
+  const { default: prisma } = await import("@/lib/prisma");
   const rows = await prisma.product.findMany({
     where: { isApproved: false },
     orderBy: { createdAt: "desc" },
@@ -127,9 +133,11 @@ export async function getAdminPendingProducts(limit = 5): Promise<AdminPendingPr
 }
 
 export async function getAdminRecentOrders(limit = 5): Promise<AdminRecentOrder[]> {
+  if (!getRuntimeDatabaseUrl()) return [];
   const source = await resolveDataSource();
   if (source !== "database") return [];
 
+  const { default: prisma } = await import("@/lib/prisma");
   const rows = await prisma.order.findMany({
     orderBy: { createdAt: "desc" },
     take: limit,

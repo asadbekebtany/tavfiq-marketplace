@@ -1,10 +1,15 @@
-import { PrismaClient } from "@prisma/client";
 import { getRuntimeDatabaseUrl } from "@/lib/runtime-env";
+
+type PrismaClient = import("@prisma/client").PrismaClient;
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
 };
 
+/**
+ * @prisma/client static import qilinmaydi — Netlify’da native engine 500 beradi.
+ * Faqat DATABASE_URL bo‘lsa require qilinadi.
+ */
 function createPrismaClient(): PrismaClient {
   const url = getRuntimeDatabaseUrl();
   if (!url) {
@@ -16,7 +21,9 @@ function createPrismaClient(): PrismaClient {
     });
   }
 
-  return new PrismaClient({
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { PrismaClient: Client } = require("@prisma/client") as typeof import("@prisma/client");
+  return new Client({
     datasources: {
       db: { url },
     },
