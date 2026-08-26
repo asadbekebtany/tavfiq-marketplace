@@ -1,8 +1,8 @@
 import "server-only";
 import type { AuditAction, Prisma, Role } from "@prisma/client";
 import { checkDatabaseConnection } from "@/lib/db";
-import prisma from "@/lib/prisma";
 import { getClientIp } from "@/lib/request-ip";
+import { getRuntimeDatabaseUrl } from "@/lib/runtime-env";
 
 export type { AuditAction };
 
@@ -38,11 +38,11 @@ export function getAuditContextFromRequest(request: Request) {
   };
 }
 
-/** Audit yozuvini DB ga saqlash (DB yo'q bo'lsa jim o'tkaziladi) */
 export async function writeAuditLog(input: WriteAuditLogInput): Promise<void> {
-  if (!(await checkDatabaseConnection())) return;
+  if (!getRuntimeDatabaseUrl() || !(await checkDatabaseConnection())) return;
 
   try {
+    const { default: prisma } = await import("@/lib/prisma");
     await prisma.auditLog.create({
       data: {
         actorId: input.actorId,
@@ -70,6 +70,11 @@ export type AuditLogListFilters = {
 };
 
 export async function listAuditLogs(filters: AuditLogListFilters = {}) {
+  if (!getRuntimeDatabaseUrl() || !(await checkDatabaseConnection())) {
+    return { logs: [], total: 0, limit: 50, offset: 0 };
+  }
+
+  const { default: prisma } = await import("@/lib/prisma");
   const limit = Math.min(Math.max(filters.limit ?? 50, 1), 100);
   const offset = Math.max(filters.offset ?? 0, 0);
   const q = filters.q?.trim();
